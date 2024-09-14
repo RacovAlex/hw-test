@@ -22,8 +22,8 @@ func Unpack(str string) (string, error) {
 		if i == len(runes)-1 {
 			if !unicode.IsDigit(r) {
 				sb.WriteRune(r)
-				break
 			}
+			break
 		}
 		// Является ли символ цифрой.
 		if unicode.IsDigit(r) {
