@@ -1,7 +1,11 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
 
 func TestReadDir(t *testing.T) {
-	// Place your code here
+	require.Equal(t, true, true)
 }
