@@ -9,6 +9,20 @@ type (
 type Stage func(in In) (out Out)
 
 func ExecutePipeline(in In, done In, stages ...Stage) Out {
-	// Place your code here.
-	return nil
+	for _, stage := range stages {
+		out := make(chan interface{})
+		middle := stage(in)
+		go func(middle In, out chan interface{}) {
+			defer close(out)
+			for i := range middle {
+				select {
+				case <-done:
+					return
+				case out <- i:
+				}
+			}
+		}(middle, out)
+		in = out
+	}
+	return in
 }
