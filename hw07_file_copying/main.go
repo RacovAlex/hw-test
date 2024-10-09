@@ -2,6 +2,8 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"log"
 )
 
 var (
@@ -18,5 +20,18 @@ func init() {
 
 func main() {
 	flag.Parse()
-	// Place your code here.
+
+	if from == "" || to == "" || from == to {
+		flag.Usage()
+		log.Fatal("Invalid arguments: -from and -to must be specified and not be the same.")
+	}
+
+	fmt.Printf("Copying from %s to %s with offset %d and limit %d\n", from, to, offset, limit)
+
+	err := Copy(from, to, offset, limit)
+	if err != nil {
+		log.Fatalf("copy files: %v", err)
+	}
+
+	fmt.Printf("File copied to %s successfully\n", to)
 }
