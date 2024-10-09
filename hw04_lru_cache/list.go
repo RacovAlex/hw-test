@@ -11,7 +11,6 @@ type List interface {
 }
 
 type ListItem struct {
-	Key   Key
 	Value interface{}
 	Next  *ListItem
 	Prev  *ListItem
@@ -74,12 +73,20 @@ func (l *list) Remove(i *ListItem) {
 	case i == l.front:
 		i.Next.Prev = nil
 		l.front = i.Next
+		i.Next = nil
 	case i == l.back:
 		i.Prev.Next = nil
 		l.back = i.Prev
+		i.Prev = nil
 	default:
-		i.Prev.Next = i.Next
-		i.Next.Prev = i.Prev
+		if i.Prev != nil {
+			i.Prev.Next = i.Next
+		}
+		if i.Next != nil {
+			i.Next.Prev = i.Prev
+		}
+		i.Next = nil
+		i.Prev = nil
 	}
 	l.len--
 }
@@ -88,21 +95,22 @@ func (l *list) MoveToFront(i *ListItem) {
 	if l.Len() == 0 {
 		return
 	}
-	if i != l.front {
-		if i == l.back {
-			i.Prev.Next = nil
-			l.back = i.Prev
-		} else {
-			i.Prev.Next = i.Next
-		}
-		if i.Next != nil {
-			i.Next.Prev = i.Prev
-		}
-		i.Prev = nil
-		i.Next = l.front
-		l.front.Prev = i
-		l.front = i
+	if i == l.front {
+		return
 	}
+	if i == l.back {
+		i.Prev.Next = nil
+		l.back = i.Prev
+	} else {
+		i.Prev.Next = i.Next
+	}
+	if i.Next != nil {
+		i.Next.Prev = i.Prev
+	}
+	i.Prev = nil
+	i.Next = l.front
+	l.front.Prev = i
+	l.front = i
 }
 
 func NewList() List {
