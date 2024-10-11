@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 var ErrErrorsLimitExceeded = errors.New("errors limit exceeded")
@@ -16,14 +17,22 @@ func Run(tasks []Task, n, m int) error {
 	if m <= 0 {
 		m = len(tasks) + 1
 	}
+	// Не запускаем лишние горутины, если количество задач меньше количества горутин
+	if len(tasks) < n {
+		n = len(tasks)
+	}
 
-	// Устанавливаем флаг и счетчик
-	var stopFlag int32
-	counter := 0
+	// Устанавливаем канал для завершения воркеров
+	done := make(chan struct{})
+	// Канал для получения результатов работы воркеров
+	results := make(chan error, m)
+	// Канал для принятия Tasks из массива
+	work := make(chan Task, len(tasks))
 
-	ch := make(chan Task, len(tasks))
-	mu := &sync.Mutex{}
 	wg := &sync.WaitGroup{}
+
+	// Счетчик ошибок
+	var errCount int32
 
 	for i := 0; i < n; i++ {
 		wg.Add(1)
@@ -31,39 +40,58 @@ func Run(tasks []Task, n, m int) error {
 		// Запускаем воркер в горутине
 		go func() {
 			defer wg.Done()
-			for task := range ch {
-				// Проверяем флаг остановки перед выполнением задачи
-				// и прекращаем выполнение горутины при наличии флага
-				if atomic.LoadInt32(&stopFlag) == 1 {
+			// Используем паттерн concurrency для работы с Tasks
+			for {
+				select {
+				case <-done:
 					return
+				default:
 				}
 
-				// Выполняем задачу
-				err := task()
-				// Если задача завершилась ошибкой, увеличиваем счётчик ошибок
-				if err != nil {
-					mu.Lock()
-					counter++
-					// Если счетчик ошибок превысил лимит ошибок
-					// устанавливаем флаг остановки
-					if counter >= m {
-						atomic.StoreInt32(&stopFlag, 1)
-					}
-					mu.Unlock()
+				select {
+				case task := <-work:
+					results <- task()
+				default:
+					time.Sleep(time.Millisecond * 10)
 				}
 			}
 		}()
 	}
 
 	for _, task := range tasks {
-		ch <- task
+		work <- task
 	}
-	close(ch)
+	// Закрывать канал work не требуется, так как имеется механизм
+	// завершения воркеров через закрытие канала done. Если же канал будет
+	// закрываться - требуется проверка на наличия Task при чтении из него.
 
+	go func() {
+		// Устанавливаем счетчик выполненных заданий для проверки на необходимость завершения
+		// работы через закрытие канала done
+		doneTaskCount := 0
+		var once sync.Once
+
+		for err := range results {
+			doneTaskCount++
+			// Безопасный доступ нужен, так как errCount читается из основной горутины
+			if err != nil {
+				atomic.AddInt32(&errCount, 1)
+			}
+			// Если достигнут лимит ошибок или выполнены все задания - отправляем сигнал на завершение
+			if m == int(atomic.LoadInt32(&errCount)) || doneTaskCount == len(tasks) {
+				// Закрываем канал через once, так как данный цикл не прекращается
+				once.Do(func() {
+					close(done)
+				})
+			}
+		}
+	}()
+
+	// Ожидаем завершение всех горутин
 	wg.Wait()
+	close(results)
 
-	// После завершения всех горутин возвращаем ошибку при превышении лимита
-	if counter >= m {
+	if int(atomic.LoadInt32(&errCount)) >= m {
 		return ErrErrorsLimitExceeded
 	}
 
